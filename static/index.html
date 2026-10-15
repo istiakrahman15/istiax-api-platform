@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ISTIAX API — Developer Platform</title>
+<link rel="stylesheet" href="/static/style.css">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+<header class="top"><a class="brand" href="/"><span class="mark">IX</span><span>ISTIAX <i>API</i></span></a><a class="quiet" href="/docs">API Docs ↗</a></header>
+<main>
+<section class="hero"><div class="eyebrow"><span class="dot"></span> DEVELOPER PLATFORM</div><h1>Media APIs.<br><span>Built for builders.</span></h1><p class="lead">Generate an API key and connect your apps, websites, and Telegram bots to your downloader backend.</p></section>
+<section class="panel">
+<div class="panel-head"><div><h2>Your workspace</h2><p>Sign in to manage API keys.</p></div><span class="status"><span class="dot"></span> API service</span></div>
+<div id="configNotice" class="notice hidden">Setup needed: enter your Supabase project URL and anon key in <code>static/app.js</code>.</div>
+<div id="authPanel">
+<div class="tabs"><button id="loginTab" class="tab active">Sign in</button><button id="signupTab" class="tab">Create account</button></div>
+<form id="authForm"><label>Email</label><input id="email" type="email" placeholder="you@example.com" required><label>Password</label><input id="password" type="password" minlength="6" placeholder="At least 6 characters" required><button class="primary" id="authSubmit">Sign in <span>→</span></button></form>
+<p id="authMsg" class="message"></p></div>
+<div id="dashPanel" class="hidden">
+<div class="signed">Signed in as <strong id="userEmail"></strong><button id="logoutBtn" class="textbtn">Sign out</button></div>
+<div class="key-row"><div><h3>API keys</h3><p>Keep keys private. Generate a separate key for each project.</p></div><button id="createKey" class="primary compact">＋ Generate key</button></div>
+<div id="newKey" class="newkey hidden"><strong>Copy your new key now</strong><p>It will not be shown again.</p><div class="copyrow"><code id="newKeyValue"></code><button id="copyKey" class="secondary">Copy</button></div></div>
+<div id="keysList" class="keys"><p class="muted">Loading keys…</p></div>
+</div>
+</section>
+<section class="feature-grid"><article><span>01</span><h3>One key, your apps</h3><p>Use bearer authentication from a backend, bot, or server-side app.</p></article><article><span>02</span><h3>Simple integration</h3><p>JSON responses and interactive OpenAPI docs make testing easier.</p></article><article><span>03</span><h3>Built with safety</h3><p>Only key hashes are stored. Revoke a key if it is exposed.</p></article></section>
+<footer>ISTIAX API <span>Developer preview · Use only authorized media</span></footer>
+</main><script src="/static/app.js"></script></body></html>
