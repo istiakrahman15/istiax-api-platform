@@ -1,29 +1,187 @@
-<!doctype html>
+
+<!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ISTIAX API — Developer Platform</title>
-<link rel="stylesheet" href="/static/style.css">
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#0b0d12">
+  <title>ISTIAX API Platform</title>
+  <meta name="description" content="Manage your ISTIAX API keys and applications.">
+
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: #090b10;
+      color: #f4f5f7;
+      font-family: system-ui, -apple-system, sans-serif;
+      line-height: 1.6;
+    }
+    header {
+      padding: 22px 6%;
+      border-bottom: 1px solid #242832;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .brand { font-weight: 800; letter-spacing: 1px; }
+    .brand span { color: #c1fa55; }
+    .container { width: min(100% - 32px, 760px); margin: 48px auto; }
+    .intro { margin-bottom: 26px; }
+    .intro h1 { font-size: clamp(30px, 7vw, 46px); line-height: 1.15; margin: 0 0 12px; }
+    .intro p, .muted { color: #a4a9b6; }
+    .panel {
+      background: #10131b;
+      border: 1px solid #292e3a;
+      border-radius: 22px;
+      padding: clamp(20px, 5vw, 34px);
+      margin-bottom: 24px;
+    }
+    .tabs { display: flex; border-bottom: 1px solid #292e3a; margin-bottom: 26px; }
+    .tab {
+      flex: 1; padding: 12px 4px; background: transparent;
+      border: 0; border-bottom: 3px solid transparent;
+      color: #a4a9b6; font-size: 16px; cursor: pointer;
+    }
+    .tab.active { color: white; border-bottom-color: #c1fa55; }
+    label { display: block; margin: 18px 0 8px; color: #d8dbe3; }
+    input {
+      width: 100%; padding: 15px; border-radius: 12px;
+      border: 1px solid #343947; background: #090b10;
+      color: white; font: inherit; outline: none;
+    }
+    input:focus { border-color: #c1fa55; }
+    button {
+      cursor: pointer; font: inherit;
+    }
+    .primary {
+      width: 100%; margin-top: 24px; padding: 16px;
+      border: 0; border-radius: 12px; background: #c1fa55;
+      color: #11150a; font-weight: 800;
+    }
+    .primary:disabled { opacity: .6; cursor: wait; }
+    .secondary {
+      border: 1px solid #343947; border-radius: 10px;
+      padding: 9px 13px; background: #171b25; color: white;
+    }
+    .notice {
+      padding: 12px 14px; border-radius: 10px;
+      margin-top: 16px; overflow-wrap: anywhere;
+    }
+    .error { background: #30151d; color: #ff9bb0; }
+    .success { background: #172717; color: #c1fa55; }
+    .hidden { display: none !important; }
+    .section-head {
+      display: flex; align-items: center;
+      justify-content: space-between; gap: 12px; flex-wrap: wrap;
+    }
+    .key-item {
+      border: 1px solid #292e3a; border-radius: 12px;
+      padding: 15px; margin-top: 12px; overflow-wrap: anywhere;
+    }
+    .key-item p { margin: 5px 0; }
+    .key-value { font-family: monospace; color: #c1fa55; }
+    .danger { color: #ff9bb0; border-color: #67303a; }
+    .feature {
+      border: 1px solid #242832; border-radius: 16px;
+      padding: 22px; margin-top: 18px; background: #0d1016;
+    }
+    .number { color: #c1fa55; }
+    footer { text-align: center; padding: 28px 16px; color: #777e8c; }
+  </style>
 </head>
+
 <body>
-<header class="top"><a class="brand" href="/"><span class="mark">IX</span><span>ISTIAX <i>API</i></span></a><a class="quiet" href="/docs">API Docs ↗</a></header>
-<main>
-<section class="hero"><div class="eyebrow"><span class="dot"></span> DEVELOPER PLATFORM</div><h1>Media APIs.<br><span>Built for builders.</span></h1><p class="lead">Generate an API key and connect your apps, websites, and Telegram bots to your downloader backend.</p></section>
-<section class="panel">
-<div class="panel-head"><div><h2>Your workspace</h2><p>Sign in to manage API keys.</p></div><span class="status"><span class="dot"></span> API service</span></div>
-<div id="configNotice" class="notice hidden">Setup needed: enter your Supabase project URL and anon key in <code>static/app.js</code>.</div>
-<div id="authPanel">
-<div class="tabs"><button id="loginTab" class="tab active">Sign in</button><button id="signupTab" class="tab">Create account</button></div>
-<form id="authForm"><label>Email</label><input id="email" type="email" placeholder="you@example.com" required><label>Password</label><input id="password" type="password" minlength="6" placeholder="At least 6 characters" required><button class="primary" id="authSubmit">Sign in <span>→</span></button></form>
-<p id="authMsg" class="message"></p></div>
-<div id="dashPanel" class="hidden">
-<div class="signed">Signed in as <strong id="userEmail"></strong><button id="logoutBtn" class="textbtn">Sign out</button></div>
-<div class="key-row"><div><h3>API keys</h3><p>Keep keys private. Generate a separate key for each project.</p></div><button id="createKey" class="primary compact">＋ Generate key</button></div>
-<div id="newKey" class="newkey hidden"><strong>Copy your new key now</strong><p>It will not be shown again.</p><div class="copyrow"><code id="newKeyValue"></code><button id="copyKey" class="secondary">Copy</button></div></div>
-<div id="keysList" class="keys"><p class="muted">Loading keys…</p></div>
-</div>
-</section>
-<section class="feature-grid"><article><span>01</span><h3>One key, your apps</h3><p>Use bearer authentication from a backend, bot, or server-side app.</p></article><article><span>02</span><h3>Simple integration</h3><p>JSON responses and interactive OpenAPI docs make testing easier.</p></article><article><span>03</span><h3>Built with safety</h3><p>Only key hashes are stored. Revoke a key if it is exposed.</p></article></section>
-<footer>ISTIAX API <span>Developer preview · Use only authorized media</span></footer>
-</main><script src="/static/app.js"></script></body></html>
+  <header>
+    <div class="brand">ISTIAX <span>API</span></div>
+    <a href="/docs" style="color:#c1fa55;text-decoration:none">API Docs ↗</a>
+  </header>
+
+  <main class="container">
+    <section class="intro">
+      <h1>One key.<br>All your apps.</h1>
+      <p>Sign in to manage your API keys and connect your applications.</p>
+    </section>
+
+    <section id="configNotice" class="notice error hidden">
+      Supabase is not configured. Check your Project URL, public key and JavaScript library.
+    </section>
+
+    <section id="authPanel" class="panel">
+      <div class="tabs">
+        <button id="loginTab" class="tab active" type="button">Sign in</button>
+        <button id="signupTab" class="tab" type="button">Create account</button>
+      </div>
+
+      <form id="authForm">
+        <label for="email">Email</label>
+        <input id="email" name="email" type="email"
+          autocomplete="email" placeholder="you@example.com" required>
+
+        <label for="password">Password</label>
+        <input id="password" name="password" type="password"
+          autocomplete="current-password" minlength="6"
+          placeholder="At least 6 characters" required>
+
+        <button id="authSubmit" class="primary" type="submit">
+          Sign in →
+        </button>
+      </form>
+
+      <div id="authMessage" class="notice hidden" role="status"></div>
+    </section>
+
+    <section id="dashPanel" class="panel hidden">
+      <div class="section-head">
+        <div>
+          <h2 style="margin:0">Your dashboard</h2>
+          <p id="userEmail" class="muted"></p>
+        </div>
+        <button id="logoutBtn" class="secondary" type="button">Sign out</button>
+      </div>
+
+      <hr style="border:0;border-top:1px solid #292e3a;margin:24px 0">
+
+      <h3>Create an API key</h3>
+      <form id="keyForm">
+        <label for="keyName">Key name</label>
+        <input id="keyName" name="name" maxlength="80"
+          placeholder="My application" required>
+        <button id="createKeyBtn" class="primary" type="submit">
+          + Create API key
+        </button>
+      </form>
+
+      <div id="keyMessage" class="notice hidden" role="status"></div>
+
+      <div class="section-head" style="margin-top:30px">
+        <h3 style="margin:0">Your API keys</h3>
+        <button id="refreshBtn" class="secondary" type="button">Refresh</button>
+      </div>
+      <div id="keysList">
+        <p class="muted">Sign in to load your keys.</p>
+      </div>
+    </section>
+
+    <section class="feature">
+      <div class="number">01</div>
+      <h2>One key, your apps</h2>
+      <p class="muted">Use API authentication from your backend, bot or server-side application.</p>
+    </section>
+
+    <section class="feature">
+      <div class="number">02</div>
+      <h2>Developer documentation</h2>
+      <p class="muted">Explore available endpoints and request formats in the API documentation.</p>
+      <a href="/docs" style="color:#c1fa55">Open API docs →</a>
+    </section>
+  </main>
+
+  <footer>ISTIAX API Platform</footer>
+
+  <!-- Load Supabase FIRST, then your application JavaScript -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>
