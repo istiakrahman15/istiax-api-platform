@@ -1,136 +1,120 @@
 
-/*
- * ISTIAX API Platform
- * Supabase authentication + API key dashboard
- *
- * IMPORTANT:
- * Use only your Supabase Project URL and public
- * anon/publishable key here.
- * NEVER put the service_role or secret key here.
- */
+"use strict";
 
+// Replace these with your real Supabase project details.
 const SUPABASE_URL = "https://iopactkfsrnwrjcpbump.supabase.co";
-const SUPABASE_ANON_KEY = "PASTE_YOUR_PUBLIC_ANON_OR_PUBLISHABLE_KEY_HERE";
-
-/* ---------- Configuration ---------- */
-
-const configured =
-  typeof SUPABASE_URL === "string" &&
-  /^https:\/\/[^/]+\.supabase\.co\/?$/.test(SUPABASE_URL) &&
-  typeof SUPABASE_ANON_KEY === "string" &&
-  SUPABASE_ANON_KEY.length > 20 &&
-  !SUPABASE_ANON_KEY.includes("PASTE_YOUR_") &&
-  !SUPABASE_ANON_KEY.includes("YOUR_SUPABASE");
-
-const notice = document.querySelector("#configNotice");
-const authPanel = document.querySelector("#authPanel");
-const dashPanel = document.querySelector("#dashPanel");
-
-let supabaseClient = null;
-let mode = "login";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlvcGFjdGtmc3Jud3JqY3BidW1wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTIwNzk3MzIsImV4cCI6MjEwNzY1NTczMn0.b5R2nKWKDvciZu5qpaY53C9bA2TW6W6bsbia1ojuF64";
 
 const $ = (selector) => document.querySelector(selector);
 
-function message(text, error = false) {
-  const element = $("#authMsg");
+const configNotice = $("#configNotice");
+const authPanel = $("#authPanel");
+const dashPanel = $("#dashPanel");
+const authMessage = $("#authMessage");
+const keyMessage = $("#keyMessage");
+
+let supabaseClient = null;
+let mode = "login";
+let currentSession = null;
+let refreshInProgress = false;
+
+function showMessage(element, message, type = "error") {
   if (!element) return;
-
-  element.textContent = text;
-  element.style.color = error ? "#ff9caa" : "#c9f36a";
+  element.textContent = message;
+  element.className = `notice ${type}`;
 }
 
-function escapeHtml(value) {
-  return String(value).replace(/[&<>"']/g, (char) => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#39;"
-  })[char]);
+function hideMessage(element) {
+  if (!element) return;
+  element.textContent = "";
+  element.classList.add("hidden");
 }
 
-/* ---------- Supabase initialization ---------- */
-
-if (notice) {
-  notice.classList.toggle("hidden", configured);
-}
-
-if (configured && window.supabase?.createClient) {
-  try {
-    supabaseClient = window.supabase.createClient(
-      SUPABASE_URL,
-      SUPABASE_ANON_KEY
-    );
-  } catch (error) {
-    console.error("Supabase initialization failed:", error);
-    message("Supabase could not initialize. Check your configuration.", true);
+function setBusy(button, busy, text) {
+  if (!button) return;
+  if (busy) {
+    button.dataset.originalText = button.textContent;
+    button.textContent = text;
+    button.disabled = true;
+  } else {
+    button.textContent = button.dataset.originalText || text;
+    button.disabled = false;
   }
-} else if (configured && !window.supabase?.createClient) {
-  console.error("Supabase JS library was not loaded.");
 }
-
-/* ---------- Login / Signup mode ---------- */
 
 function setMode(nextMode) {
-  mode = nextMode;
+  mode = nextMode === "signup" ? "signup" : "login";
 
-  $("#loginTab")?.classList.toggle("active", mode === "login");
-  $("#signupTab")?.classList.toggle("active", mode === "signup");
+  $("#loginTab").classList.toggle("active", mode === "login");
+  $("#signupTab").classList.toggle("active", mode === "signup");
+  $("#authSubmit").textContent =
+    mode === "login" ? "Sign in →" : "Create account →";
 
-  const submitButton = $("#authSubmit");
+  $("#password").autocomplete =
+    mode === "login" ? "current-password" : "new-password";
 
-  if (submitButton) {
-    submitButton.innerHTML =
-      mode === "login"
-        ? 'Sign in <span>→</span>'
-        : 'Create account <span>→</span>';
+  hideMessage(authMessage);
+}
+
+function setLoggedIn(session) {
+  currentSession = session || null;
+
+  const loggedIn = Boolean(currentSession);
+
+  authPanel.classList.toggle("hidden", loggedIn);
+  dashPanel.classList.toggle("hidden", !loggedIn);
+
+  if (loggedIn) {
+    $("#userEmail").textContent =
+      currentSession.user?.email || "Signed in";
+    hideMessage(authMessage);
+    loadKeys();
+  } else {
+    $("#userEmail").textContent = "";
+    $("#keysList").textContent = "Sign in to load your keys.";
+    hideMessage(keyMessage);
+  }
+}
+
+async function getAccessToken() {
+  if (!supabaseClient) {
+    throw new Error("Supabase is not configured.");
   }
 
-  message("");
-}
-
-$("#loginTab")?.addEventListener("click", () => setMode("login"));
-$("#signupTab")?.addEventListener("click", () => setMode("signup"));
-
-/* ---------- Session ---------- */
-
-async function getSession() {
-  if (!supabaseClient) return null;
-
   const { data, error } = await supabaseClient.auth.getSession();
-
   if (error) throw error;
 
-  return data.session;
-}
+  currentSession = data.session;
 
-/* ---------- Authenticated API requests ---------- */
-
-async function api(path, options = {}) {
-  const session = await getSession();
-
-  if (!session) {
+  if (!currentSession?.access_token) {
     throw new Error("Please sign in again.");
   }
 
-  const headers = {
-    ...(options.headers || {}),
-    Authorization: `Bearer ${session.access_token}`,
-    "Content-Type": "application/json"
-  };
+  return currentSession.access_token;
+}
+
+async function apiRequest(path, options = {}) {
+  const token = await getAccessToken();
 
   const response = await fetch(path, {
     ...options,
-    headers
+    headers: {
+      "Content-Type": "application/json",
+      ...(options.headers || {}),
+      Authorization: `Bearer ${token}`
+    }
   });
 
-  const data = await response.json().catch(() => ({}));
+  const raw = await response.text();
+  let data = {};
+
+  try {
+    data = raw ? JSON.parse(raw) : {};
+  } catch {
+    data = { detail: raw || "Unexpected server response." };
+  }
 
   if (!response.ok) {
-    if (response.status === 401) {
-      throw new Error("Your session is invalid or expired. Please sign in again.");
-    }
-
     throw new Error(
       data.detail || data.message || `Request failed (${response.status})`
     );
@@ -139,266 +123,299 @@ async function api(path, options = {}) {
   return data;
 }
 
-/* ---------- Login / Signup form ---------- */
-
-$("#authForm")?.addEventListener("submit", async (event) => {
-  event.preventDefault();
-
-  if (!supabaseClient) {
-    message(
-      "Supabase is not configured. Check the URL, public key and Supabase JS library.",
-      true
-    );
-    return;
-  }
-
-  const email = $("#email")?.value.trim();
-  const password = $("#password")?.value;
-  const submitButton = $("#authSubmit");
-
-  if (!email || !password) {
-    message("Enter your email and password.", true);
-    return;
-  }
-
-  if (submitButton) submitButton.disabled = true;
-  message("Please wait…");
-
-  try {
-    let result;
-
-    if (mode === "login") {
-      result = await supabaseClient.auth.signInWithPassword({
-        email,
-        password
-      });
-    } else {
-      result = await supabaseClient.auth.signUp({
-        email,
-        password
-      });
-    }
-
-    if (result.error) throw result.error;
-
-    if (mode === "signup" && !result.data.session) {
-      message("Account created. Check your email to confirm, then sign in.");
-      return;
-    }
-
-    message(mode === "login" ? "Signed in successfully." : "Account created.");
-    await refreshUI();
-  } catch (error) {
-    console.error("Authentication error:", error);
-    message(error.message || "Authentication failed.", true);
-  } finally {
-    if (submitButton) submitButton.disabled = false;
-  }
-});
-
-/* ---------- Logout ---------- */
-
-$("#logoutBtn")?.addEventListener("click", async () => {
-  if (!supabaseClient) return;
-
-  try {
-    const { error } = await supabaseClient.auth.signOut();
-    if (error) throw error;
-
-    await refreshUI();
-    message("Signed out successfully.");
-  } catch (error) {
-    console.error("Logout error:", error);
-    alert(error.message || "Could not sign out.");
-  }
-});
-
-/* ---------- Create API key ---------- */
-
-$("#createKey")?.addEventListener("click", async () => {
-  const button = $("#createKey");
-  if (button) button.disabled = true;
-
-  try {
-    const result = await api("/api/keys", {
-      method: "POST",
-      body: "{}"
-    });
-
-    if (!result.api_key) {
-      throw new Error("The server did not return an API key.");
-    }
-
-    const keyValue = $("#newKeyValue");
-    const newKeyPanel = $("#newKey");
-
-    if (keyValue) keyValue.textContent = result.api_key;
-    newKeyPanel?.classList.remove("hidden");
-
-    await loadKeys();
-  } catch (error) {
-    console.error("Create API key error:", error);
-    alert(error.message || "Could not create API key.");
-  } finally {
-    if (button) button.disabled = false;
-  }
-});
-
-/* ---------- Copy API key ---------- */
-
-$("#copyKey")?.addEventListener("click", async () => {
-  const value = $("#newKeyValue")?.textContent || "";
-  const button = $("#copyKey");
-
-  if (!value) return;
-
-  try {
-    await navigator.clipboard.writeText(value);
-
-    if (button) {
-      const originalText = button.textContent;
-      button.textContent = "Copied";
-      setTimeout(() => {
-        button.textContent = originalText;
-      }, 1500);
-    }
-  } catch {
-    alert("Clipboard unavailable. Select and copy the key manually.");
-  }
-});
-
-/* ---------- Load API keys ---------- */
-
-async function loadKeys() {
-  const container = $("#keysList");
-  if (!container) return;
-
-  container.textContent = "Loading…";
-
-  try {
-    const data = await api("/api/keys");
-
-    if (!Array.isArray(data.keys)) {
-      throw new Error("Unexpected response from the API.");
-    }
-
-    if (data.keys.length === 0) {
-      container.innerHTML =
-        '<p class="muted">No API keys yet. Generate your first key above.</p>';
-      return;
-    }
-
-    container.replaceChildren();
-
-    for (const key of data.keys) {
-      const row = document.createElement("div");
-      row.className = "keyitem";
-
-      const info = document.createElement("div");
-      info.className = "keyinfo";
-
-      const code = document.createElement("code");
-      code.textContent = `${key.key_prefix || "API"}••••••••`;
-
-      const small = document.createElement("small");
-      const createdDate = key.created_at
-        ? new Date(key.created_at).toLocaleDateString()
-        : "Unknown";
-
-      small.textContent =
-        `${key.is_active ? "Active" : "Revoked"} · Created ${createdDate}`;
-
-      info.append(code, small);
-      row.append(info);
-
-      if (key.is_active) {
-        const button = document.createElement("button");
-        button.className = "revoke";
-        button.textContent = "Revoke";
-
-        button.addEventListener("click", async () => {
-          if (!confirm("Revoke this API key? Existing integrations will stop working.")) {
-            return;
-          }
-
-          button.disabled = true;
-
-          try {
-            await api(`/api/keys/${encodeURIComponent(key.id)}`, {
-              method: "DELETE"
-            });
-
-            await loadKeys();
-          } catch (error) {
-            console.error("Revoke API key error:", error);
-            alert(error.message || "Could not revoke API key.");
-            button.disabled = false;
-          }
-        });
-
-        row.append(button);
-      }
-
-      container.append(row);
-    }
-  } catch (error) {
-    console.error("Load API keys error:", error);
-
-    container.innerHTML =
-      `<p class="muted">${escapeHtml(error.message)}</p>`;
-  }
+function extractKeys(data) {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data.keys)) return data.keys;
+  if (Array.isArray(data.items)) return data.items;
+  return [];
 }
 
-/* ---------- Refresh dashboard ---------- */
+function renderKeys(data) {
+  const container = $("#keysList");
+  container.replaceChildren();
 
-let refreshInProgress = false;
+  const keys = extractKeys(data);
 
-async function refreshUI() {
-  if (refreshInProgress) return;
+  if (!keys.length) {
+    const empty = document.createElement("p");
+    empty.className = "muted";
+    empty.textContent = "No API keys found yet. Create your first key above.";
+    container.appendChild(empty);
+    return;
+  }
+
+  keys.forEach((key) => {
+    const item = document.createElement("div");
+    item.className = "key-item";
+
+    const title = document.createElement("strong");
+    title.textContent = key.name || key.label || "API key";
+
+    const id = document.createElement("p");
+    id.className = "muted";
+    id.textContent = `ID: ${key.id ?? key.key_id ?? "Not provided"}`;
+
+    item.append(title, id);
+
+    // Only show a key if the API actually returns it.
+    // Many services reveal the full secret only once, at creation.
+    const secret = key.key || key.api_key || key.token;
+
+    if (secret) {
+      const value = document.createElement("p");
+      value.className = "key-value";
+      value.textContent = secret;
+      item.appendChild(value);
+
+      const copy = document.createElement("button");
+      copy.className = "secondary";
+      copy.type = "button";
+      copy.textContent = "Copy key";
+      copy.addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(secret);
+          copy.textContent = "Copied!";
+        } catch {
+          showMessage(keyMessage, "Could not copy automatically.", "error");
+        }
+      });
+      item.appendChild(copy);
+    }
+
+    const keyId = key.id ?? key.key_id;
+
+    if (keyId !== undefined && keyId !== null) {
+      const revoke = document.createElement("button");
+      revoke.className = "secondary danger";
+      revoke.type = "button";
+      revoke.textContent = "Revoke";
+      revoke.style.marginLeft = "8px";
+
+      revoke.addEventListener("click", async () => {
+        if (!confirm("Are you sure you want to revoke this API key?")) return;
+
+        revoke.disabled = true;
+
+        try {
+          await apiRequest(
+            `/api/keys/${encodeURIComponent(keyId)}`,
+            { method: "DELETE" }
+          );
+          showMessage(keyMessage, "API key revoked.", "success");
+          await loadKeys();
+        } catch (error) {
+          showMessage(keyMessage, error.message);
+          revoke.disabled = false;
+        }
+      });
+
+      item.appendChild(revoke);
+    }
+
+    container.appendChild(item);
+  });
+}
+
+async function loadKeys() {
+  if (!currentSession || refreshInProgress) return;
+
   refreshInProgress = true;
+  $("#keysList").textContent = "Loading API keys...";
 
   try {
-    const session = await getSession();
-
-    authPanel?.classList.toggle("hidden", Boolean(session));
-    dashPanel?.classList.toggle("hidden", !session);
-
-    if (session) {
-      const userEmail = $("#userEmail");
-
-      if (userEmail) {
-        userEmail.textContent = session.user.email || "User";
-      }
-
-      await loadKeys();
-    }
+    const data = await apiRequest("/api/keys");
+    renderKeys(data);
   } catch (error) {
-    console.error("Dashboard refresh error:", error);
-    message(error.message || "Could not load your session.", true);
+    $("#keysList").textContent = "";
+    showMessage(keyMessage, error.message);
   } finally {
     refreshInProgress = false;
   }
 }
 
-/* ---------- Auth state listener ---------- */
+async function handleAuth(event) {
+  event.preventDefault();
+  hideMessage(authMessage);
 
-if (supabaseClient) {
-  supabaseClient.auth.onAuthStateChange((event, session) => {
-    console.info("Auth state changed:", event);
-    setTimeout(() => refreshUI(), 0);
-  });
+  if (!supabaseClient) {
+    showMessage(authMessage, "Supabase is not configured.");
+    return;
+  }
+
+  const email = $("#email").value.trim();
+  const password = $("#password").value;
+  const button = $("#authSubmit");
+
+  setBusy(button, true, "Please wait...");
+
+  try {
+    let result;
+
+    if (mode === "signup") {
+      result = await supabaseClient.auth.signUp({ email, password });
+
+      if (result.error) throw result.error;
+
+      if (!result.data.session) {
+        showMessage(
+          authMessage,
+          "Account created. Check your email to confirm your account before signing in.",
+          "success"
+        );
+        return;
+      }
+    } else {
+      result = await supabaseClient.auth.signInWithPassword({
+        email,
+        password
+      });
+
+      if (result.error) throw result.error;
+    }
+
+    setLoggedIn(result.data.session);
+  } catch (error) {
+    showMessage(authMessage, error.message || "Authentication failed.");
+  } finally {
+    setBusy(button, false, "Sign in →");
+    $("#authSubmit").textContent =
+      mode === "login" ? "Sign in →" : "Create account →";
+  }
 }
 
-/* ---------- Initial page load ---------- */
+async function handleCreateKey(event) {
+  event.preventDefault();
+  hideMessage(keyMessage);
 
-if (!configured) {
-  console.error(
-    "Supabase configuration is missing. Check SUPABASE_URL and SUPABASE_ANON_KEY."
-  );
-} else if (!supabaseClient) {
-  console.error(
-    "Supabase client is unavailable. Check that the Supabase JS library loads before app.js."
-  );
+  const name = $("#keyName").value.trim();
+  if (!name) {
+    showMessage(keyMessage, "Enter a name for your API key.");
+    return;
+  }
+
+  const button = $("#createKeyBtn");
+  setBusy(button, true, "Creating key...");
+
+  try {
+    const result = await apiRequest("/api/keys", {
+      method: "POST",
+      body: JSON.stringify({ name })
+    });
+
+    showMessage(
+      keyMessage,
+      result.key || result.api_key || result.token
+        ? "API key created. Copy and save it securely."
+        : "Request completed. Check the key list below.",
+      "success"
+    );
+
+    // Display the response when it contains a newly created secret.
+    const secret = result.key || result.api_key || result.token;
+
+    if (secret) {
+      const secretBox = document.createElement("div");
+      secretBox.className = "key-item";
+
+      const label = document.createElement("strong");
+      label.textContent = "New API key — save it now";
+
+      const value = document.createElement("p");
+      value.className = "key-value";
+      value.textContent = secret;
+
+      const copy = document.createElement("button");
+      copy.className = "secondary";
+      copy.type = "button";
+      copy.textContent = "Copy key";
+      copy.addEventListener("click", async () => {
+        try {
+          await navigator.clipboard.writeText(secret);
+          copy.textContent = "Copied!";
+        } catch {
+          showMessage(keyMessage, "Copy failed. Select and copy the key manually.");
+        }
+      });
+
+      secretBox.append(label, value, copy);
+      $("#keysList").prepend(secretBox);
+    }
+
+    $("#keyName").value = "";
+    await loadKeys();
+  } catch (error) {
+    showMessage(keyMessage, error.message || "Could not create API key.");
+  } finally {
+    setBusy(button, false, "+ Create API key");
+  }
 }
 
-refreshUI();
+async function logout() {
+  if (!supabaseClient) return;
+
+  const { error } = await supabaseClient.auth.signOut();
+
+  if (error) {
+    showMessage(authMessage, error.message);
+    return;
+  }
+
+  setLoggedIn(null);
+  setMode("login");
+}
+
+async function init() {
+  const placeholder =
+    !SUPABASE_ANON_KEY ||
+    SUPABASE_ANON_KEY.includes("PASTE_YOUR") ||
+    SUPABASE_ANON_KEY.includes("YOUR_SUPABASE");
+
+  const validUrl =
+    /^https:\/\/[a-zA-Z0-9-]+\.supabase\.co\/?$/.test(SUPABASE_URL);
+
+  if (
+    !validUrl ||
+    placeholder ||
+    SUPABASE_ANON_KEY.length < 20 ||
+    !window.supabase?.createClient
+  ) {
+    configNotice.classList.remove("hidden");
+    showMessage(
+      authMessage,
+      !window.supabase?.createClient
+        ? "Supabase JS library did not load. Check your internet connection and script tag."
+        : "Supabase is not configured. Check the Project URL and public key."
+    );
+    return;
+  }
+
+  configNotice.classList.add("hidden");
+
+  try {
+    supabaseClient = window.supabase.createClient(
+      SUPABASE_URL,
+      SUPABASE_ANON_KEY
+    );
+
+    $("#loginTab").addEventListener("click", () => setMode("login"));
+    $("#signupTab").addEventListener("click", () => setMode("signup"));
+    $("#authForm").addEventListener("submit", handleAuth);
+    $("#keyForm").addEventListener("submit", handleCreateKey);
+    $("#logoutBtn").addEventListener("click", logout);
+    $("#refreshBtn").addEventListener("click", loadKeys);
+
+    const { data, error } = await supabaseClient.auth.getSession();
+    if (error) throw error;
+
+    setLoggedIn(data.session);
+
+    supabaseClient.auth.onAuthStateChange((_event, session) => {
+      currentSession = session || null;
+      setLoggedIn(currentSession);
+    });
+  } catch (error) {
+    showMessage(authMessage, error.message || "Could not initialize Supabase.");
+  }
+}
+
+document.addEventListener("DOMContentLoaded", init);
